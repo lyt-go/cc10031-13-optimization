@@ -119,18 +119,55 @@ class BaseModuleService:
 
     def _read_jsonl(self, filepath: Path) -> list[dict[str, Any]]:
         """从 JSONL 文件逐行读取记录列表，用于跨模块共享数据产物。"""
+        records, _ = self._read_jsonl_checked(filepath)
+        return records
+
+    def _read_jsonl_checked(self, filepath: Path) -> tuple[list[dict[str, Any]], int]:
+        """读取 JSONL 并返回（记录, 损坏行数），用于区分“空文件”和“文件不可用”。"""
         if not filepath.exists():
-            return []
+            return [], 0
         records = []
+        bad_lines = 0
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if line:
-                    try:
-                        records.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-        return records
+                if not line:
+                    continue
+                try:
+                    records.append(json.loads(line))
+                except json.JSONDecodeError:
+                    bad_lines += 1
+        return records, bad_lines
+
+    def _atomic_write_text(self, filepath: Path, content: str) -> int:
+        """原子替换写文本：同目录临时文件 + os.replace，避免重跑时留下半份/两份产物。"""
+        _ensure_dir(filepath.parent)
+        tmp = filepath.with_name(
+            f".{filepath.name}.tmp-{os.getpid()}-{time.time_ns()}")
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, filepath)
+        return len(content)
+
+    def _atomic_write_jsonl(self, filepath: Path, records: list[dict[str, Any]]) -> int:
+        """整份替换写 JSONL，返回记录条数。重跑覆盖而不是追加。"""
+        content = "".join(
+            json.dumps(rec, ensure_ascii=False, default=str) + "\n" for rec in records)
+        self._atomic_write_text(filepath, content)
+        return len(records)
+
+    def _atomic_write_json(self, filepath: Path, payload: Any) -> None:
+        self._atomic_write_text(
+            filepath, json.dumps(payload, ensure_ascii=False, indent=2, default=str))
+
+    def _read_json(self, filepath: Path, default: Any = None) -> Any:
+        if not filepath.exists():
+            return default
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError):
+            return default
 
     def _write_checkpoint(self, name: str, state: dict[str, Any]) -> Path:
         """写入检查点文件记录处理进度水位。"""

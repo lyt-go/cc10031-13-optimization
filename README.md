@@ -69,6 +69,31 @@ npm run dev
 | 时序质量 | `series_quality` | 质量报告 | 报告编号、测点编号、统计窗口 |
 | 序列快照 | `series_snapshot` | 版本快照 | 快照编号、口径说明、测点范围 |
 
+
+## 批量标定续做与时间对齐版本
+
+单位标定与时间对齐之间有一条“版本—产物—对齐”的强约束，相关接口挂在模块子路径下：
+
+| 接口 | 作用 |
+| --- | --- |
+| `GET /api/unit_calibrate/points` | 待标定/已获准测点列表，带源文件状态与当前可用版本数 |
+| `POST /api/unit_calibrate/batch` | 多选测点批量标定；带 `batch_key` 即续做 |
+| `GET /api/unit_calibrate/batch/{batch_key}` | 批次落盘状态（成功/缺源/需复核各自独立） |
+| `GET /api/unit_calibrate/points/{point}/versions` | 单测点版本清单，`usable_version_count` 恒 ≤ 1 |
+| `POST /api/time_align/{id}/propose` | 发起对齐：冻结拟对齐测点与当时的标定版本快照 |
+| `POST /api/time_align/{id}/submit` | 提交对齐：按各测点最新获准版本重算，锁定每格取值出处 |
+| `GET /api/time_align/{id}/results/latest` | 已提交结果，按时格给出取值与出处 |
+| `POST /api/time_align/{id}/verify` | 复验指定时格：重算取值并核对版本/源文件摘要 |
+
+语义要点：
+
+- 每个测点只有一份“当前可用”标定产物。同规则重跑按版本键原地覆盖；规则变化时新版本接管，
+  旧版本在清单里标记 `superseded`，前端不会出现两个可选项。
+- 批量任务逐台独立计算：成功写产物；缺源保留旧产物并列入“可继续的范围”；规则在批次中途
+  变更的测点标记“需复核”且不自动覆盖。
+- 对齐发起时冻结版本快照，提交前若有测点获准了新规则，提交会按最新获准版本重算并在
+  `revalidated` 里报告差异；对齐结果每格带 `calibrate_version` 与 `record_digest`，可复验。
+
 ## 约定
 
 - 全部模块共享`frontend/src/views/WorkbenchView.vue|tsx`和一套资源路由。

@@ -22,6 +22,12 @@
       </article>
     </div>
 
+    <CalibrationBatchPanel
+      v-if="meta.key === 'unit_calibrate'"
+      @batch-done="reload"
+    />
+    <TimeAlignPanel v-if="meta.key === 'time_align'" />
+
     <p class="status-legend">
       <span v-for="item in statusSummary" :key="item.status" class="legend-item">
         {{ item.status }}：{{ item.count }}
@@ -103,6 +109,8 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/backend-service'
+import CalibrationBatchPanel from '@/components/CalibrationBatchPanel.vue'
+import TimeAlignPanel from '@/components/TimeAlignPanel.vue'
 import type { EntryRow } from '@/data/types'
 
 const props = defineProps<{ moduleKey: string }>()
